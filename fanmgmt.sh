@@ -39,23 +39,23 @@ if [[ "$new_mode" != "$mode" ]]; then
   case $new_mode in
 
     boil)
-      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o HostKeyAlgorithms=ssh-rsa -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 max 255'
-      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o HostKeyAlgorithms=ssh-rsa -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 min 240'
+      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 max 255'
+      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 min 240'
       ;;
     hot)
-      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o HostKeyAlgorithms=ssh-rsa -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 max 255'
-      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o HostKeyAlgorithms=ssh-rsa -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 min 120'
+      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 max 255'
+      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 min 120'
       ;;
     okay)
-      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o HostKeyAlgorithms=ssh-rsa -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 max 255'
-      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o HostKeyAlgorithms=ssh-rsa -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 min 80'
+      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 max 255'
+      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 min 80'
       ;;
     cool)
-      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o HostKeyAlgorithms=ssh-rsa -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 max 16'
-      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o HostKeyAlgorithms=ssh-rsa -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 min 0'
+      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 max 16'
+      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 min 0'
       ;;
     cold)
-      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o HostKeyAlgorithms=ssh-rsa -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 max 1'
+      sshpass -p "$PASS" ssh -o KexAlgorithms=+diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o HostKeyAlgorithms=ssh-dss -o StrictHostKeyChecking=no "$USER"@"$HOST" 'fan p 0 max 1'
       ;;
   esac
 fi
