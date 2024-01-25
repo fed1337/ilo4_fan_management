@@ -4,8 +4,8 @@
 
 ### Create a separate user in iLO
 Login to iLO > Administration (tab) > User Administration.
-Create a new user. **Remember this password!**  
-Remove all 5 permissions. They are not needed, so uncheck the following:
+Create a new user.  
+Remove the following (all) 5 permissions. They are not needed:
 - Administer User Accounts
 - Remote Console Access
 - Virtual Power and Reset
@@ -13,78 +13,85 @@ Remove all 5 permissions. They are not needed, so uncheck the following:
 - Configure iLO Settings
 
 ### Authentication
-There are two methods:
-
 #### Keys
-You can find guides all over. I ran into countless issues and threw my hands up in frustration, but it is the proper option.
+You must need an RSA key. Be aware that this command will overwrite your current key, if exists
+```shell
+ssh-keygen -t rsa -b 2048
+```
+
+In iLO web interface go to Administration->Security choose a user, click Authorize new Key and paste your public key
+
+You can usually obtain it like this
+```shell
+cat .ssh/id_rsa.pub
+```
 
 #### Password in config file
-This is the dummy method, and it's what I went with. Since we disabled all permissions for our new iLO user anyway, it was an acceptable risk.  
-Install sshpass with `apt install sshpass` (for deb based distributions)
-
-
-## Setup the script
-
-### Download
+If you are going to use password-based auth, then you must have sshpass installed
+For deb based distributions
 ```shell
-git clone 
+`apt install sshpass
 ```
 
-### Make sure that the script is executable and config is writable. Make changes if necessary
+
+## Setup
+Download repository
 ```shell
-ls -lh fanmgmt
-chmod 777 %repo_dir%/fanmgmt.sh
-chmod 666 %repo_dir%/fanmgmt.conf
+git clone https://github.com/fed1337/ilo4_fan_management.git
 ```
 
-### Adjusting the config
+Make sure that the script is executable and config is readable. Make changes if necessary
 ```shell
-nano %repo_dir%/fanmgmt.conf
+ls -lh ilo4_fan_management
+chmod 777 ilo4_fan_management/fanmgmt.sh
+chmod 444 ilo4_fan_management/fanmgmt.conf
 ```
-adjust user, pass and host to match your iLO setup, then save. **Ensure to keep the quotes!**
+Consult comments in the config file for a setup
+```shell
+nano ilo4_fan_management/fanmgmt.conf
+```
 
-### Setting up the cron task
+
+## Running the script
+
+### Cron
 ```shell
 crontab -e
 ```
 Add a line (**change the script path**) and save (ctrl+w for nano)
 ```shell
-* * * * * * /home/fed/fanmgmt/fanmgmt.sh
+* * * * * * /home/fed/ilo4_fan_management/fanmgmt.sh
 ```
 This task is scheduled every minute
 
-## Editing the script & config
-It's my first bash script, so I want to believe that it's pretty much self-explanatory. 
-
-The script checks CPU and HDD temperatures (ones that are most accurate and the most I personally care about) and decides which `mode` to use. `mode` adjusts the speed of the only fan in this little server.
-
-Modes from coldest to hottest:
-- cold
-- cool
-- okay
-- warm (not yet implemented)
-- hot
-- boil
-
-You can adjust threshold temperatures for each `mode` separate for HDD and CPU (both cores and package) in the config file.
+### Systemd service
+Adjust path in fanmgmt.service then copy it to systemd
+```shell
+sudo cp ilo4_fan_management/fanmgmt.service /etc/systemd/system
+sudo systemctl daemon-reload
+sudo systemctl start fanmgmt
+sudo systemctl status fanmgmt
+```
 
 ## Troubleshooting
+### Seems like fan speed ignoring temperature sensors
+Please inspect the script code, specifically how temperatures are grep'ed. Your sensors may be called differently.
+Those are `HDD*` and `CPU*` variables
 
-### Temperature sensors are named differently
-You can check that by looking at the log file (fanmgmt.log in the same directory with the script). You can run the script manually or wait a couple of minutes for cron to run the script in order for logs to appear
+Another idea is that you may want a more/less aggressive fan curve. Study how `HDD_PERC` and `CPU_PERC` variables are set.
 
-In this case you'll see lines like this, but with some values missing
-```shell
-2024-01-05 01:14:07 | CPU0: 32 | CPU1: 29 | CPU2: 37 | CPU3: 30 | CPU Package: 37 | HDD2: 35 | HDD3: 35 | HDD4: 34 | PREV_MODE: okay | CUR_MODE: okay
-2024-01-05 01:15:06 | CPU0: 34 | CPU1: 32 | CPU2: 38 | CPU3: 30 | CPU Package: 38 | HDD2: 35 | HDD3: 35 | HDD4: 34 | PREV_MODE: okay | CUR_MODE: okay
-```
-In order to fix that you to change commands in the script (lines 13-21) accordingly. Just run them in your terminal and tweak as needed
 
-### iLO shell does not give any output
+### iLO shell does not provide output
 i.e. `fan info` does not provide any output
 
 **"Solution"**  
 Only first login can see any responses.
-Reset iLO (iLO > Info > Diagnostics) each time to view
+Reset iLO (iLO > Info > Diagnostics) each time in order to see the responses.  
+This is a firmware bug
 
-## Thanks
+
+## Acknowledgements
+It couldn't be possible to sleep at nights with this server in the same room without these talented people
+- [Original post with modified firmware](https://www.reddit.com/r/homelab/comments/hix44v/silence_of_the_fans_pt_2_hp_ilo_4_273_now_with/)
+- [An updated firmware & documented research](https://github.com/kendallgoto/ilo4_unlock/tree/main)
+- [Forum topic with an example script](https://forums.unraid.net/topic/141249-how-to-control-hpe-ilo-fan-speed-ilo-4-gen-8~9/)

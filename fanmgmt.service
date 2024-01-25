@@ -1,0 +1,16 @@
+[Unit]
+Description=iLO4 Fan Management Service for HP Microserver Gen8
+After=hp-health.service
+After=hp-ams.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/fed/ilo4_fan_management
+ExecStart=/bin/bash /home/fed/ilo4_fan_management/fanmgmt.sh
+TimeoutSec=10
+Restart=always
+RestartSec=5
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target
