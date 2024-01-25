@@ -12,8 +12,9 @@ Remove the following (all) 5 permissions. They are not needed:
 - Virtual Media
 - Configure iLO Settings
 
+
 ### Authentication
-#### Keys
+#### Key
 You must need an RSA key. Be aware that this command will overwrite your current key, if exists
 ```shell
 ssh-keygen -t rsa -b 2048
@@ -26,11 +27,12 @@ You can usually obtain it like this
 cat .ssh/id_rsa.pub
 ```
 
-#### Password in config file
+
+#### Password
 If you are going to use password-based auth, then you must have sshpass installed
 For deb based distributions
 ```shell
-`apt install sshpass
+apt install sshpass
 ```
 
 
@@ -46,6 +48,7 @@ ls -lh ilo4_fan_management
 chmod 777 ilo4_fan_management/fanmgmt.sh
 chmod 444 ilo4_fan_management/fanmgmt.conf
 ```
+
 Consult comments in the config file for a setup
 ```shell
 nano ilo4_fan_management/fanmgmt.conf
@@ -53,7 +56,6 @@ nano ilo4_fan_management/fanmgmt.conf
 
 
 ## Running the script
-
 ### Cron
 ```shell
 crontab -e
@@ -63,6 +65,7 @@ Add a line (**change the script path**) and save (ctrl+w for nano)
 * * * * * * /home/fed/ilo4_fan_management/fanmgmt.sh
 ```
 This task is scheduled every minute
+
 
 ### Systemd service
 Adjust path in fanmgmt.service then copy it to systemd
