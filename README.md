@@ -1,4 +1,8 @@
 # Fan management script for HP Microserver Gen 8
+This script provides an automated fan speed control based on operating temperature of HDD and CPU of the only one fan in HP Microserver Gen8.
+
+You must run a modified ILO 4 with accessible `fan` command in order to use this (see [Acknowledgements](#acknowledgements) section)
+
 
 ## Prerequisites
 
@@ -29,8 +33,8 @@ cat .ssh/id_rsa.pub
 
 
 #### Password
-If you are going to use password-based auth, then you must have sshpass installed
-For deb based distributions
+If you are going to use password-based auth, then you must have sshpass installed.  
+For deb based distributions run
 ```shell
 apt install sshpass
 ```
@@ -56,7 +60,7 @@ nano ilo4_fan_management/fanmgmt.conf
 
 
 ## Running the script
-### Cron
+### Cron task (v0.1)
 ```shell
 crontab -e
 ```
@@ -64,11 +68,13 @@ Add a line (**change the script path**) and save (ctrl+w for nano)
 ```shell
 * * * * * * /home/fed/ilo4_fan_management/fanmgmt.sh
 ```
-This task is scheduled every minute
+This task is scheduled to run every minute
 
 
-### Systemd service
-Adjust path in fanmgmt.service then copy it to systemd
+### Systemd service (v0.2+)
+Adjust path in fanmgmt.service then copy it to systemd.
+
+`hp-ams` and `hp-health` are not really needed. However, they are nice to have. If you choose not to install those packages, you need to modify `Unit` section as well.
 ```shell
 sudo cp ilo4_fan_management/fanmgmt.service /etc/systemd/system
 sudo systemctl daemon-reload
