@@ -87,10 +87,10 @@ function unset_flags() {
 
 function set_fanspeed() {
   ssh_failed="False"
-  eval "${CONNECTION_STR} 'fan p 0 max $1'" || ssh_failed="True"
-  eval "${CONNECTION_STR} 'fan p 0 min $2'" || ssh_failed="True"
+  eval "${CONNECTION_STR} 'fan p 0 max $1'" >/dev/null 2>&1 || ssh_failed="True"
+  eval "${CONNECTION_STR} 'fan p 0 min $2'" >/dev/null 2>&1 || ssh_failed="True"
   if [[ $ssh_failed == "False" ]]; then
-    >&2 echo "<5> Fan speed changed to (max,min): $1, $2"
+    >&2 echo "<5> Fan speed changed to (max,min): $1,$2"
   else
     subject="[HP Server] [ALERT] Cannot connect to ILO!"
     body="Cannot connect to ILO host: $HOST\n
