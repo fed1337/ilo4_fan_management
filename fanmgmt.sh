@@ -34,6 +34,7 @@ HDD_PERC30=$(printf "%.0f" "$(echo "$HDD_CRITICAL_TEMP * 0.35" | bc -l)")
 MAX=255
 COLD_MAX=1
 COLD_MIN=0
+CRIT_MIN=248
 PERC90_MIN=184
 PERC80_MIN=144
 PERC70_MIN=112
@@ -41,7 +42,6 @@ PERC60_MIN=80
 PERC50_MIN=56
 PERC40_MIN=32
 PERC30_MIN=16
-CRIT_MIN=248
 
 if [[ $AUTHMETHOD == 'key' ]]; then
   CONNECTION_STR="ssh -i $KEY -o KexAlgorithms=diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o PubkeyAcceptedKeyTypes=ssh-rsa $USER@$HOST"
@@ -69,7 +69,7 @@ function send_email() {
        --mail-rcpt "$RECIPIENT" \
        --user "$SMTP_USERNAME:$SMTP_PASSWORD" \
        -T <(echo -e "$@")
-  >&2 echo "<4> Email sent: $@"
+  >&2 echo "<4> Email sent: $*"
 }
 
 function unset_flags() {
@@ -85,6 +85,31 @@ function unset_flags() {
   >&2 echo "<5> Flags unset"
 }
 
+function set_fanspeed() {
+  ssh_failed="False"
+  eval "${CONNECTION_STR} 'fan p 0 max $1'" || ssh_failed="True"
+  eval "${CONNECTION_STR} 'fan p 0 min $2'" || ssh_failed="True"
+  if [[ $ssh_failed == "False" ]]; then
+    >&2 echo "<5> Fan speed changed to (max,min): $1, $2"
+  else
+    subject="[HP Server] [ALERT] Cannot connect to ILO!"
+    body="Cannot connect to ILO host: $HOST\n
+TEMPERATURES:
+HDD2: $HDD2
+HDD3: $HDD3
+HDD4: $HDD4
+CPU0: $CPU0
+CPU1: $CPU1
+CPU2: $CPU2
+CPU3: $CPU3
+CPU Package: $CPUP"
+    message="Subject: $subject\n\n$body"
+    >&2 echo "<3> Cannot connect to ILO host: $HOST"
+    send_email "$message"
+    return 1
+  fi
+}
+
 while true;
 do
   HDD2=$(smartctl -a /dev/sdb | grep 194 | grep -Eo '[0-9.]+' | sed '7q;d')
@@ -96,20 +121,20 @@ do
   CPU3=$(sensors -Aj coretemp-isa-0000 | jq -s '.[] | .[] | ."Core 3" | .temp5_input')
   CPUP=$(sensors -Aj coretemp-isa-0000 | jq -s '.[] | .[] | ."Package id 0" | .temp1_input')
 
+  >&2 echo "<5> CPU0: $CPU0 | CPU1: $CPU1 | CPU2: $CPU2 | CPU3: $CPU3 | CPU Package: $CPUP | HDD2: $HDD2 | HDD3: $HDD3 | HDD4: $HDD4"
+
   if [[ $HDD2 -ge $HDD_CRITICAL_TEMP  || $HDD3 -ge $HDD_CRITICAL_TEMP  || $HDD4 -ge $HDD_CRITICAL_TEMP  || $CPU0 -ge $CPU_CRITICAL_TEMP  || $CPU1 -ge $CPU_CRITICAL_TEMP  || $CPU2 -ge $CPU_CRITICAL_TEMP  || $CPU3 -ge $CPU_CRITICAL_TEMP  || $CPUP -ge $CPU_CRITICAL_TEMP ]]; then
     if [[ $CRIT_TEMP_FLAG == "False" ]]; then
-      eval "${CONNECTION_STR} 'fan p 0 max $MAX'"
-      eval "${CONNECTION_STR} 'fan p 0 min $CRIT_MIN'"
-      >&2 echo "<5> Fan speed changed to (max,min): $MAX, $CRIT_MIN"
+      set_fanspeed $MAX $CRIT_MIN || { sleep 60; continue; }
       subject="[HP Server] [ALERT] Server is boiling!"
       body="TEMPERATURES:\n
-HDD2: $HDD2\n
-HDD3: $HDD3\n
-HDD4: $HDD4\n
-CPU0: $CPU0\n
-CPU1: $CPU1\n
-CPU2: $CPU2\n
-CPU3: $CPU3\n
+HDD2: $HDD2
+HDD3: $HDD3
+HDD4: $HDD4
+CPU0: $CPU0
+CPU1: $CPU1
+CPU2: $CPU2
+CPU3: $CPU3
 CPU Package: $CPUP"
       message="Subject: $subject\n\n$body"
       send_email "$message"
@@ -117,13 +142,13 @@ CPU Package: $CPUP"
     if [[ $CRIT_TEMP_FLAG == "True" ]]; then
       subject="[HP Server] [ALERT] Server is shutting down!"
       body="TEMPERATURES:\n
-HDD2: $HDD2\n
-HDD3: $HDD3\n
-HDD4: $HDD4\n
-CPU0: $CPU0\n
-CPU1: $CPU1\n
-CPU2: $CPU2\n
-CPU3: $CPU3\n
+HDD2: $HDD2
+HDD3: $HDD3
+HDD4: $HDD4
+CPU0: $CPU0
+CPU1: $CPU1
+CPU2: $CPU2
+CPU3: $CPU3
 CPU Package: $CPUP
 FLAG: $CRIT_TEMP_FLAG"
       message="Subject: $subject\n\n$body"
@@ -137,9 +162,7 @@ FLAG: $CRIT_TEMP_FLAG"
 
   elif [[ $HDD2 -ge $HDD_PERC90  || $HDD3 -ge $HDD_PERC90  || $HDD4 -ge $HDD_PERC90  || $CPU0 -ge $CPU_PERC90  || $CPU1 -ge $CPU_PERC90  || $CPU2 -ge $CPU_PERC90  || $CPU3 -ge $CPU_PERC90  || $CPUP -ge $CPU_PERC90 ]]; then
     if [[ $F9 == "False" ]]; then
-      eval "${CONNECTION_STR} 'fan p 0 max $MAX'"
-      eval "${CONNECTION_STR} 'fan p 0 min $PERC90_MIN'"
-      >&2 echo "<5> Fan speed changed to (max,min): $MAX, $PERC90_MIN"
+      set_fanspeed $MAX $PERC90_MIN || { sleep 60; continue; }
     fi
     unset_flags
     F9="True"
@@ -147,9 +170,7 @@ FLAG: $CRIT_TEMP_FLAG"
 
   elif [[ $HDD2 -ge $HDD_PERC80  || $HDD3 -ge $HDD_PERC80  || $HDD4 -ge $HDD_PERC80  || $CPU0 -ge $CPU_PERC80  || $CPU1 -ge $CPU_PERC80  || $CPU2 -ge $CPU_PERC80  || $CPU3 -ge $CPU_PERC80  || $CPUP -ge $CPU_PERC80 ]]; then
     if [[ $F8 == "False" ]]; then
-      eval "${CONNECTION_STR} 'fan p 0 max $MAX'"
-      eval "${CONNECTION_STR} 'fan p 0 min $PERC80_MIN'"
-      >&2 echo "<5> Fan speed changed to (max,min): $MAX, $PERC80_MIN"
+      set_fanspeed $MAX $PERC80_MIN || { sleep 60; continue; }
     fi
     unset_flags
     F8="True"
@@ -157,9 +178,7 @@ FLAG: $CRIT_TEMP_FLAG"
 
   elif [[ $HDD2 -ge $HDD_PERC70  || $HDD3 -ge $HDD_PERC70  || $HDD4 -ge $HDD_PERC70  || $CPU0 -ge $CPU_PERC70  || $CPU1 -ge $CPU_PERC70  || $CPU2 -ge $CPU_PERC70  || $CPU3 -ge $CPU_PERC70  || $CPUP -ge $CPU_PERC70 ]]; then
     if [[ $F7 == "False" ]]; then
-      eval "${CONNECTION_STR} 'fan p 0 max $MAX'"
-      eval "${CONNECTION_STR} 'fan p 0 min $PERC70_MIN'"
-      >&2 echo "<5> Fan speed changed to (max,min): $MAX, $PERC70_MIN"
+      set_fanspeed $MAX $PERC70_MIN || { sleep 60; continue; }
     fi
     unset_flags
     F7="True"
@@ -167,9 +186,7 @@ FLAG: $CRIT_TEMP_FLAG"
 
   elif [[ $HDD2 -ge $HDD_PERC60  || $HDD3 -ge $HDD_PERC60  || $HDD4 -ge $HDD_PERC60  || $CPU0 -ge $CPU_PERC60  || $CPU1 -ge $CPU_PERC60  || $CPU2 -ge $CPU_PERC60  || $CPU3 -ge $CPU_PERC60  || $CPUP -ge $CPU_PERC60 ]]; then
     if [[ $F6 == "False" ]]; then
-      eval "${CONNECTION_STR} 'fan p 0 max $MAX'"
-      eval "${CONNECTION_STR} 'fan p 0 min $PERC60_MIN'"
-      >&2 echo "<5> Fan speed changed to (max,min): $MAX, $PERC60_MIN"
+      set_fanspeed $MAX $PERC60_MIN || { sleep 60; continue; }
     fi
     unset_flags
     F6="True"
@@ -177,9 +194,7 @@ FLAG: $CRIT_TEMP_FLAG"
 
   elif [[ $HDD2 -ge $HDD_PERC50  || $HDD3 -ge $HDD_PERC50  || $HDD4 -ge $HDD_PERC50  || $CPU0 -ge $CPU_PERC50  || $CPU1 -ge $CPU_PERC50  || $CPU2 -ge $CPU_PERC50  || $CPU3 -ge $CPU_PERC50  || $CPUP -ge $CPU_PERC50 ]]; then
     if [[ $F5 == "False" ]]; then
-      eval "${CONNECTION_STR} 'fan p 0 max $MAX'"
-      eval "${CONNECTION_STR} 'fan p 0 min $PERC50_MIN'"
-      >&2 echo "<5> Fan speed changed to (max,min): $MAX, $PERC50_MIN"
+      set_fanspeed $MAX $PERC50_MIN || { sleep 60; continue; }
     fi
     unset_flags
     F5="True"
@@ -187,9 +202,7 @@ FLAG: $CRIT_TEMP_FLAG"
 
   elif [[ $HDD2 -ge $HDD_PERC40  || $HDD3 -ge $HDD_PERC40  || $HDD4 -ge $HDD_PERC40  || $CPU0 -ge $CPU_PERC40  || $CPU1 -ge $CPU_PERC40  || $CPU2 -ge $CPU_PERC40  || $CPU3 -ge $CPU_PERC40  || $CPUP -ge $CPU_PERC40 ]]; then
     if [[ $F4 == "False" ]]; then
-      eval "${CONNECTION_STR} 'fan p 0 max $MAX'"
-      eval "${CONNECTION_STR} 'fan p 0 min $PERC40_MIN'"
-      >&2 echo "<5> Fan speed changed to (max,min): $MAX, $PERC40_MIN"
+      set_fanspeed $MAX $PERC40_MIN || { sleep 60; continue; }
     fi
     unset_flags
     F4="True"
@@ -197,9 +210,7 @@ FLAG: $CRIT_TEMP_FLAG"
 
   elif [[ $HDD2 -gt $HDD_PERC30  || $HDD3 -gt $HDD_PERC30  || $HDD4 -gt $HDD_PERC30  || $CPU0 -gt $CPU_PERC30  || $CPU1 -gt $CPU_PERC30  || $CPU2 -gt $CPU_PERC30  || $CPU3 -gt $CPU_PERC30  || $CPUP -gt $CPU_PERC30 ]]; then
     if [[ $F3 == "False" ]]; then
-      eval "${CONNECTION_STR} 'fan p 0 max $MAX'"
-      eval "${CONNECTION_STR} 'fan p 0 min $PERC30_MIN'"
-      >&2 echo "<5> Fan speed changed to (max,min): $MAX, $PERC30_MIN"
+      set_fanspeed $MAX $PERC30_MIN || { sleep 60; continue; }
     fi
     unset_flags
     F3="True"
@@ -207,26 +218,23 @@ FLAG: $CRIT_TEMP_FLAG"
 
   else
     if [[ $COLD_TEMP_FLAG == "False" ]]; then
-      eval "${CONNECTION_STR} 'fan p 0 max $COLD_MAX'"
-      eval "${CONNECTION_STR} 'fan p 0 min $COLD_MIN'"
-      >&2 echo "<5> Fan speed changed to (max,min): $COLD_MAX, $COLD_MIN"
+      set_fanspeed $COLD_MAX $COLD_MIN || { sleep 60; continue; }
       unset_flags
       COLD_TEMP_FLAG="True"
       >&2 echo "<4> COLD_TEMP_FLAG=$COLD_TEMP_FLAG"
       subject="[HP Server] [ALERT] Server is freezing!"
       body="TEMPERATURES:\n
-HDD2: $HDD2\n
-HDD3: $HDD3\n
-HDD4: $HDD4\n
-CPU0: $CPU0\n
-CPU1: $CPU1\n
-CPU2: $CPU2\n
-CPU3: $CPU3\n
+HDD2: $HDD2
+HDD3: $HDD3
+HDD4: $HDD4
+CPU0: $CPU0
+CPU1: $CPU1
+CPU2: $CPU2
+CPU3: $CPU3
 CPU Package: $CPUP"
       message="Subject: $subject\n\n$body"
       send_email "$message"
     fi
   fi
-  >&2 echo "<5> CPU0: $CPU0 | CPU1: $CPU1 | CPU2: $CPU2 | CPU3: $CPU3 | CPU Package: $CPUP | HDD2: $HDD2 | HDD3: $HDD3 | HDD4: $HDD4"
   sleep "$FREQ"
 done
