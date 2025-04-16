@@ -1,7 +1,6 @@
 #!/bin/bash
 
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-CONFIG="$SCRIPT_DIR/fanmgmt.conf"
+KEY="$HOME/.ssh/id_rsa"
 CONNECTION_STR=""
 CRIT_TEMP_FLAG="False"
 COLD_TEMP_FLAG="False"
@@ -12,9 +11,19 @@ F6="False"
 F5="False"
 F4="False"
 F3="False"
-TOOLS="curl smartctl sensors"
+TOOLS="curl smartctl sensors bc jq"
 
-source "$CONFIG"
+if [ "$EUID" -ne 0 ]; then
+  echo "ILO4 Fan manager must run as root!" >&2
+  exit 1
+fi
+
+if [[ ! -f "/etc/ilo4_fan_manager.conf" ]]; then
+  logger -t ilo4_fan_manager -p user.err "Config not found at /etc/ilo4_fan_manager.conf"
+  exit 1
+fi
+
+source "/etc/ilo4_fan_manager.conf"
 
 CPU_PERC90=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.9" | bc -l)")
 CPU_PERC80=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.8" | bc -l)")
@@ -35,15 +44,15 @@ if [[ $AUTHMETHOD == 'key' ]]; then
   CONNECTION_STR="ssh -i $KEY -o KexAlgorithms=diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o PubkeyAcceptedKeyTypes=ssh-rsa $USER@$HOST"
 elif [[ $AUTHMETHOD == 'password' ]]; then
   TOOLS+=" sshpass"
-  CONNECTION_STR="sshpass -p $PASS ssh -o KexAlgorithms=diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa $USER@$HOST"
+  CONNECTION_STR="sshpass -p $SSH_PASSWORD ssh -o KexAlgorithms=diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa $USER@$HOST"
 else
-  echo "<2> Invalid AUTHMETHOD in config. Aborting." >&2
+  logger -t ilo4_fan_manager -p user.err "Invalid AUTHMETHOD in config. Aborting."
   exit 1
 fi
 
 for tool in $TOOLS; do
   if ! command -v "${tool}" >/dev/null 2>&1; then
-    echo "<2> ${0##*/}: ${tool} is not installed. Aborting." >&2
+    logger -t ilo4_fan_manager -p user.err "${tool} is not installed. Aborting."
     exit 1
   fi
 done
@@ -58,9 +67,9 @@ function send_email() {
     -T <(echo -e "$@")
   ret=$?
   if [[ $ret == 0 ]]; then
-    echo >&2 "<5> Email sent"
+    logger -t ilo4_fan_manager -p user.notice "Email sent"
   else
-    echo >&2 "<3> Email is not sent"
+    logger -t ilo4_fan_manager -p user.warning "Email is not sent"
   fi
 }
 
@@ -74,7 +83,7 @@ function unset_flags() {
   F5="False"
   F4="False"
   F3="False"
-  echo >&2 "<7> Flags unset"
+  logger -t ilo4_fan_manager -p user.debug "Flags unset"
 }
 
 function set_fanspeed() {
@@ -82,7 +91,7 @@ function set_fanspeed() {
   eval "${CONNECTION_STR} 'fan p 0 max $1'" >/dev/null 2>&1 || ssh_failed="True"
   eval "${CONNECTION_STR} 'fan p 0 min $2'" >/dev/null 2>&1 || ssh_failed="True"
   if [[ $ssh_failed == "False" ]]; then
-    echo >&2 "<6> Fan speed changed to (max,min): $1,$2"
+    logger -t ilo4_fan_manager -p user.info "Fan speed changed to (max,min): $1,$2"
   else
     subject="[HP Server] [ALERT] Cannot connect to ILO!"
     body="Cannot connect to ILO host: $HOST\n
@@ -97,7 +106,7 @@ CPU2: $CPU2
 CPU3: $CPU3
 CPU Package: $CPUP"
     message="Subject: $subject\n\n$body"
-    echo >&2 "<3> Cannot connect to ILO ($HOST)"
+    logger -t ilo4_fan_manager -p user.warning "Cannot connect to ILO ($HOST)"
     send_email "$message"
     return 1
   fi
@@ -116,7 +125,7 @@ while true; do
   CPU3=$(sensors -Aj coretemp-isa-0000 | jq -s '.[] | .[] | ."Core 3" | .temp5_input')
   CPUP=$(sensors -Aj coretemp-isa-0000 | jq -s '.[] | .[] | ."Package id 0" | .temp1_input')
 
-  echo >&2 "<6> CPU0: $CPU0 | CPU1: $CPU1 | CPU2: $CPU2 | CPU3: $CPU3 | CPU Package: $CPUP | SSD: $HDD1 | HDD2: $HDD2 | HDD3: $HDD3 | HDD4: $HDD4"
+  logger -t ilo4_fan_manager -p user.debug "CPU0: $CPU0 | CPU1: $CPU1 | CPU2: $CPU2 | CPU3: $CPU3 | CPU Package: $CPUP | SSD: $HDD1 | HDD2: $HDD2 | HDD3: $HDD3 | HDD4: $HDD4"
 
   if [[ $HDD1 -ge $HDD_CRITICAL_TEMP || $HDD2 -ge $HDD_CRITICAL_TEMP || $HDD3 -ge $HDD_CRITICAL_TEMP || $HDD4 -ge $HDD_CRITICAL_TEMP || $CPU0 -ge $CPU_CRITICAL_TEMP || $CPU1 -ge $CPU_CRITICAL_TEMP || $CPU2 -ge $CPU_CRITICAL_TEMP || $CPU3 -ge $CPU_CRITICAL_TEMP || $CPUP -ge $CPU_CRITICAL_TEMP ]]; then
     if [[ $CRIT_TEMP_FLAG == "False" ]]; then
@@ -157,7 +166,7 @@ FLAG: $CRIT_TEMP_FLAG"
     else
       unset_flags
       CRIT_TEMP_FLAG="True"
-      echo >&2 "<4> CRIT_TEMP_FLAG=$CRIT_TEMP_FLAG"
+      logger -t ilo4_fan_manager -p user.warning "CRIT_TEMP_FLAG=$CRIT_TEMP_FLAG"
     fi
 
   elif [[ $HDD1 -ge $HDD_PERC90 || $HDD2 -ge $HDD_PERC90 || $HDD3 -ge $HDD_PERC90 || $HDD4 -ge $HDD_PERC90 || $CPU0 -ge $CPU_PERC90 || $CPU1 -ge $CPU_PERC90 || $CPU2 -ge $CPU_PERC90 || $CPU3 -ge $CPU_PERC90 || $CPUP -ge $CPU_PERC90 ]]; then
@@ -169,7 +178,7 @@ FLAG: $CRIT_TEMP_FLAG"
     fi
     unset_flags
     F9="True"
-    echo >&2 "<7> F9=$F9"
+    logger -t ilo4_fan_manager -p user.debug "F9=$F9"
 
   elif [[ $HDD1 -ge $HDD_PERC80 || $HDD2 -ge $HDD_PERC80 || $HDD3 -ge $HDD_PERC80 || $HDD4 -ge $HDD_PERC80 || $CPU0 -ge $CPU_PERC80 || $CPU1 -ge $CPU_PERC80 || $CPU2 -ge $CPU_PERC80 || $CPU3 -ge $CPU_PERC80 || $CPUP -ge $CPU_PERC80 ]]; then
     if [[ $F8 == "False" ]]; then
@@ -180,7 +189,7 @@ FLAG: $CRIT_TEMP_FLAG"
     fi
     unset_flags
     F8="True"
-    echo >&2 "<7> F8=$F8"
+    logger -t ilo4_fan_manager -p user.debug "F8=$F8"
 
   elif [[ $HDD1 -ge $HDD_PERC70 || $HDD2 -ge $HDD_PERC70 || $HDD3 -ge $HDD_PERC70 || $HDD4 -ge $HDD_PERC70 || $CPU0 -ge $CPU_PERC70 || $CPU1 -ge $CPU_PERC70 || $CPU2 -ge $CPU_PERC70 || $CPU3 -ge $CPU_PERC70 || $CPUP -ge $CPU_PERC70 ]]; then
     if [[ $F7 == "False" ]]; then
@@ -191,7 +200,7 @@ FLAG: $CRIT_TEMP_FLAG"
     fi
     unset_flags
     F7="True"
-    echo >&2 "<7> F7=$F7"
+    logger -t ilo4_fan_manager -p user.debug "F7=$F7"
 
   elif [[ $HDD1 -ge $HDD_PERC60 || $HDD2 -ge $HDD_PERC60 || $HDD3 -ge $HDD_PERC60 || $HDD4 -ge $HDD_PERC60 || $CPU0 -ge $CPU_PERC60 || $CPU1 -ge $CPU_PERC60 || $CPU2 -ge $CPU_PERC60 || $CPU3 -ge $CPU_PERC60 || $CPUP -ge $CPU_PERC60 ]]; then
     if [[ $F6 == "False" ]]; then
@@ -202,7 +211,7 @@ FLAG: $CRIT_TEMP_FLAG"
     fi
     unset_flags
     F6="True"
-    echo >&2 "<7> F6=$F6"
+    logger -t ilo4_fan_manager -p user.debug "F6=$F6"
 
   elif [[ $HDD1 -ge $HDD_PERC50 || $HDD2 -ge $HDD_PERC50 || $HDD3 -ge $HDD_PERC50 || $HDD4 -ge $HDD_PERC50 || $CPU0 -ge $CPU_PERC50 || $CPU1 -ge $CPU_PERC50 || $CPU2 -ge $CPU_PERC50 || $CPU3 -ge $CPU_PERC50 || $CPUP -ge $CPU_PERC50 ]]; then
     if [[ $F5 == "False" ]]; then
@@ -213,7 +222,7 @@ FLAG: $CRIT_TEMP_FLAG"
     fi
     unset_flags
     F5="True"
-    echo >&2 "<7> F5=$F5"
+    logger -t ilo4_fan_manager -p user.debug "F5=$F5"
 
   elif [[ $HDD1 -ge $HDD_PERC40 || $HDD2 -ge $HDD_PERC40 || $HDD3 -ge $HDD_PERC40 || $HDD4 -ge $HDD_PERC40 || $CPU0 -ge $CPU_PERC40 || $CPU1 -ge $CPU_PERC40 || $CPU2 -ge $CPU_PERC40 || $CPU3 -ge $CPU_PERC40 || $CPUP -ge $CPU_PERC40 ]]; then
     if [[ $F4 == "False" ]]; then
@@ -224,7 +233,7 @@ FLAG: $CRIT_TEMP_FLAG"
     fi
     unset_flags
     F4="True"
-    echo >&2 "<7> F4=$F4"
+    logger -t ilo4_fan_manager -p user.debug "F4=$F4"
 
   elif [[ $HDD1 -gt $HDD_PERC30 || $HDD2 -gt $HDD_PERC30 || $HDD3 -gt $HDD_PERC30 || $HDD4 -gt $HDD_PERC30 || $CPU0 -gt $CPU_PERC30 || $CPU1 -gt $CPU_PERC30 || $CPU2 -gt $CPU_PERC30 || $CPU3 -gt $CPU_PERC30 || $CPUP -gt $CPU_PERC30 ]]; then
     if [[ $F3 == "False" ]]; then
@@ -235,7 +244,7 @@ FLAG: $CRIT_TEMP_FLAG"
     fi
     unset_flags
     F3="True"
-    echo >&2 "<7> F3=$F3"
+    logger -t ilo4_fan_manager -p user.debug "F3=$F3"
 
   else
     if [[ $COLD_TEMP_FLAG == "False" ]]; then
@@ -245,7 +254,7 @@ FLAG: $CRIT_TEMP_FLAG"
       }
       unset_flags
       COLD_TEMP_FLAG="True"
-      echo >&2 "<4> COLD_TEMP_FLAG=$COLD_TEMP_FLAG"
+      logger -t ilo4_fan_manager -p user.warning "COLD_TEMP_FLAG=$COLD_TEMP_FLAG"
       subject="[HP Server] [ALERT] Server is freezing!"
       body="TEMPERATURES:\n
 SSD: $HDD1

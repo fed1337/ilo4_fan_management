@@ -1,0 +1,25 @@
+[Unit]
+Description=iLO4 Fan Management Service for HP Microserver Gen8
+Wants=network.target
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/local/bin/ilo4_fan_manager.sh
+Environment="SSH_PASSWORD=value" "SMTP_PASSWORD=value"
+TimeoutSec=10
+Restart=always
+RestartSec=5
+RemainAfterExit=no
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictRealtime=yes
+SystemCallFilter=@system-service
+CapabilityBoundingSet=CAP_SYS_RAWIO
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target
