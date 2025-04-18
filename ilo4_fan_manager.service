@@ -6,6 +6,7 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/bin/bash /usr/local/bin/ilo4_fan_manager.sh
+ExecReload=/bin/kill -HUP $MAINPID
 Environment="SSH_PASSWORD=value" "SMTP_PASSWORD=value"
 TimeoutSec=10
 Restart=always

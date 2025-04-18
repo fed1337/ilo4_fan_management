@@ -18,12 +18,19 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-if [[ ! -f "/etc/ilo4_fan_manager.conf" ]]; then
-  logger -t ilo4_fan_manager -p user.err "Config not found at /etc/ilo4_fan_manager.conf"
-  exit 1
-fi
+load_config() {
+  if [[ ! -f "/etc/ilo4_fan_manager.conf" ]]; then
+    logger -t ilo4_fan_manager -p user.err "Config not found at /etc/ilo4_fan_manager.conf"
+    exit 1
+  else
+    source "/etc/ilo4_fan_manager.conf"
+    logger -t ilo4_fan_manager -p user.info "Config (re)loaded"
+  fi
+}
 
-source "/etc/ilo4_fan_manager.conf"
+load_config
+
+trap 'load_config' SIGHUP
 
 CPU_PERC90=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.9" | bc -l)")
 CPU_PERC80=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.8" | bc -l)")
