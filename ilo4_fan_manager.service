@@ -7,7 +7,9 @@ After=network.target
 Type=simple
 ExecStart=/bin/bash /usr/local/bin/ilo4_fan_manager.sh
 ExecReload=/bin/kill -HUP $MAINPID
-Environment="SSH_PASSWORD=value" "SMTP_PASSWORD=value"
+Environment="SSH_PASSWORD=value"
+Environment="SMTP_PASSWORD=value"
+Environment="TELEGRAM_BOT_TOKEN=value"
 TimeoutSec=10
 Restart=always
 RestartSec=5

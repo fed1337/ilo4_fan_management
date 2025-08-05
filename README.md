@@ -30,7 +30,7 @@ You must need an RSA key. Be aware that this command will overwrite your current
 ssh-keygen -t rsa -b 2048
 ```
 
-Make sure it's located in `/root/.ssh`
+Make sure it's called `id_rsa` and located in `$HOME/.ssh` of the user used to run the service
 
 In iLO web interface go to Administration->Security choose a user, click Authorize new Key and paste your public key
 
@@ -43,7 +43,7 @@ cat .ssh/id_rsa.pub
 #### Password
 
 If you are going to use password-based auth, then you must have sshpass installed.  
-For deb based distributions run
+For deb-based distributions run
 
 ```shell
 apt install sshpass
@@ -81,7 +81,7 @@ or manually
 
 ## Troubleshooting
 
-### Seems like fan speed ignoring temperature sensors
+### It seems like fan speed ignoring temperature sensors
 
 Please inspect the script code, specifically how temperatures are grep'ed. Your sensors may be called differently.
 Those are `HDD*` and `CPU*` variables

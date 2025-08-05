@@ -11,41 +11,34 @@ F6="False"
 F5="False"
 F4="False"
 F3="False"
-TOOLS="curl smartctl sensors bc jq"
+TOOLS="curl smartctl sensors jq"
 
 if [ "$EUID" -ne 0 ]; then
   echo "ILO4 Fan manager must run as root!" >&2
   exit 1
 fi
 
-load_config() {
-  if [[ ! -f "/etc/ilo4_fan_manager.conf" ]]; then
-    logger -t ilo4_fan_manager -p user.err "Config not found at /etc/ilo4_fan_manager.conf"
-    exit 1
-  else
-    source "/etc/ilo4_fan_manager.conf"
-    logger -t ilo4_fan_manager -p user.info "Config (re)loaded"
-  fi
-}
+if [[ ! -f "/etc/ilo4_fan_manager.conf" ]]; then
+  logger -t ilo4_fan_manager -p user.err "Config not found at /etc/ilo4_fan_manager.conf"
+  exit 1
+else
+  source "/etc/ilo4_fan_manager.conf"
+fi
 
-load_config
-
-trap 'load_config' SIGHUP
-
-CPU_PERC90=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.9" | bc -l)")
-CPU_PERC80=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.8" | bc -l)")
-CPU_PERC70=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.7" | bc -l)")
-CPU_PERC60=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.6" | bc -l)")
-CPU_PERC50=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.5" | bc -l)")
-CPU_PERC40=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.4" | bc -l)")
-CPU_PERC30=$(printf "%.0f" "$(echo "$CPU_CRITICAL_TEMP * 0.2" | bc -l)")
-HDD_PERC90=$(printf "%.0f" "$(echo "$HDD_CRITICAL_TEMP * 0.95" | bc -l)")
-HDD_PERC80=$(printf "%.0f" "$(echo "$HDD_CRITICAL_TEMP * 0.9" | bc -l)")
-HDD_PERC70=$(printf "%.0f" "$(echo "$HDD_CRITICAL_TEMP * 0.85" | bc -l)")
-HDD_PERC60=$(printf "%.0f" "$(echo "$HDD_CRITICAL_TEMP * 0.8" | bc -l)")
-HDD_PERC50=$(printf "%.0f" "$(echo "$HDD_CRITICAL_TEMP * 0.75" | bc -l)")
-HDD_PERC40=$(printf "%.0f" "$(echo "$HDD_CRITICAL_TEMP * 0.7" | bc -l)")
-HDD_PERC30=$(printf "%.0f" "$(echo "$HDD_CRITICAL_TEMP * 0.35" | bc -l)")
+CPU_PERC90=$((CPU_CRITICAL_TEMP * 9 / 10))
+CPU_PERC80=$((CPU_CRITICAL_TEMP * 8 / 10))
+CPU_PERC70=$((CPU_CRITICAL_TEMP * 7 / 10))
+CPU_PERC60=$((CPU_CRITICAL_TEMP * 6 / 10))
+CPU_PERC50=$((CPU_CRITICAL_TEMP * 5 / 10))
+CPU_PERC40=$((CPU_CRITICAL_TEMP * 4 / 10))
+CPU_PERC30=$((CPU_CRITICAL_TEMP * 2 / 10))
+HDD_PERC90=$((HDD_CRITICAL_TEMP * 95 / 100))
+HDD_PERC80=$((HDD_CRITICAL_TEMP * 9 / 10))
+HDD_PERC70=$((HDD_CRITICAL_TEMP * 85 / 100))
+HDD_PERC60=$((HDD_CRITICAL_TEMP * 8 / 10))
+HDD_PERC50=$((HDD_CRITICAL_TEMP * 75 / 100))
+HDD_PERC40=$((HDD_CRITICAL_TEMP * 7 / 10))
+HDD_PERC30=$((HDD_CRITICAL_TEMP * 3 / 10))
 
 if [[ $AUTHMETHOD == 'key' ]]; then
   CONNECTION_STR="ssh -i $KEY -o KexAlgorithms=diffie-hellman-group14-sha1 -o HostKeyAlgorithms=ssh-rsa -o PubkeyAcceptedKeyTypes=ssh-rsa $USER@$HOST"
@@ -64,20 +57,43 @@ for tool in $TOOLS; do
   fi
 done
 
-function send_email() {
-  curl --url "smtp://$SMTP_SERVER:$SMTP_PORT" \
-    --ssl-reqd \
-    --tlsv1.2 \
-    --mail-from "$SMTP_USERNAME" \
-    --mail-rcpt "$RECIPIENT" \
-    --user "$SMTP_USERNAME:$SMTP_PASSWORD" \
-    -T <(echo -e "$@")
-  ret=$?
-  if [[ $ret == 0 ]]; then
-    logger -t ilo4_fan_manager -p user.notice "Email sent"
-  else
-    logger -t ilo4_fan_manager -p user.warning "Email is not sent"
-  fi
+function notify() {
+  local subject="$1"
+  local body="$2"
+
+  case "$ALERTDESTINATION" in
+    email)
+      echo -e "From: ${MAIL_FROM} <${SMTP_USERNAME}>
+To: ${RECIPIENT}
+Subject: ${subject}
+Content-Type: text/plain; charset=UTF-8
+
+${body}" | curl --url "smtp://${SMTP_SERVER}:${SMTP_PORT}" \
+        --ssl-reqd \
+        --tlsv1.2 \
+        --mail-from "${SMTP_USERNAME}" \
+        --mail-rcpt "${RECIPIENT}" \
+        --user "${SMTP_USERNAME}:${SMTP_PASSWORD}" \
+        -T - &&
+        logger -t ilo4_fan_manager -p user.notice "Email sent" ||
+        logger -t ilo4_fan_manager -p user.warning "Email failed"
+      ;;
+    telegram)
+      curl --silent --show-error -X POST \
+        "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        -d parse_mode="Markdown" \
+        -d chat_id="${TELEGRAM_CHAT_ID}" \
+        -d text="*$subject*
+\`\`\`
+$body
+\`\`\`" &&
+        logger -t ilo4_fan_manager -p user.notice "Telegram alert sent" ||
+        logger -t ilo4_fan_manager -p user.warning "Telegram alert failed"
+      ;;
+    *)
+      logger -t ilo4_fan_manager -p user.warning "No valid ALERTDESTINATION defined in config"
+      ;;
+  esac
 }
 
 function unset_flags() {
@@ -100,8 +116,8 @@ function set_fanspeed() {
   if [[ $ssh_failed == "False" ]]; then
     logger -t ilo4_fan_manager -p user.info "Fan speed changed to (max,min): $1,$2"
   else
-    subject="[HP Server] [ALERT] Cannot connect to ILO!"
-    body="Cannot connect to ILO host: $HOST\n
+    subject="[$(hostname) - $(hostname -I | awk '{print $1}')] - Cannot connect to ILO!"
+    body="Cannot connect to ILO host: $HOST
 TEMPERATURES:
 SSD: $HDD1
 HDD2: $HDD2
@@ -112,9 +128,8 @@ CPU1: $CPU1
 CPU2: $CPU2
 CPU3: $CPU3
 CPU Package: $CPUP"
-    message="Subject: $subject\n\n$body"
     logger -t ilo4_fan_manager -p user.warning "Cannot connect to ILO ($HOST)"
-    send_email "$message"
+    notify "$subject" "$body"
     return 1
   fi
 }
@@ -126,11 +141,12 @@ while true; do
   HDD4=$(smartctl -A /dev/disk/by-id/"$HDD4_ID" | grep "194 Temperature_Celsius" | grep -Eo '[0-9.]+' | sed '7q;d')
   # Change sensors name in case these are different for your CPU
   # these can be obtained with command: sensors
-  CPU0=$(sensors -Aj coretemp-isa-0000 | jq -s '.[] | .[] | ."Core 0" | .temp2_input')
-  CPU1=$(sensors -Aj coretemp-isa-0000 | jq -s '.[] | .[] | ."Core 1" | .temp3_input')
-  CPU2=$(sensors -Aj coretemp-isa-0000 | jq -s '.[] | .[] | ."Core 2" | .temp4_input')
-  CPU3=$(sensors -Aj coretemp-isa-0000 | jq -s '.[] | .[] | ."Core 3" | .temp5_input')
-  CPUP=$(sensors -Aj coretemp-isa-0000 | jq -s '.[] | .[] | ."Package id 0" | .temp1_input')
+  SENSOR_JSON=$(sensors -Aj coretemp-isa-0000)
+  read -r CPU0 CPU1 CPU2 CPU3 CPUP <<<"$(jq -r '[."coretemp-isa-0000"."Core 0".temp2_input,
+                                                  ."coretemp-isa-0000"."Core 1".temp3_input,
+                                                  ."coretemp-isa-0000"."Core 2".temp4_input,
+                                                  ."coretemp-isa-0000"."Core 3".temp5_input,
+                                                  ."coretemp-isa-0000"."Package id 0".temp1_input] | @tsv' <<<"$SENSOR_JSON")"
 
   logger -t ilo4_fan_manager -p user.debug "CPU0: $CPU0 | CPU1: $CPU1 | CPU2: $CPU2 | CPU3: $CPU3 | CPU Package: $CPUP | SSD: $HDD1 | HDD2: $HDD2 | HDD3: $HDD3 | HDD4: $HDD4"
 
@@ -140,8 +156,8 @@ while true; do
         sleep 60
         continue
       }
-      subject="[HP Server] [ALERT] Server is boiling!"
-      body="TEMPERATURES:\n
+      subject="[$(hostname) - $(hostname -I | awk '{print $1}')] - Server is boiling!"
+      body="TEMPERATURES:
 SSD: $HDD1
 HDD2: $HDD2
 HDD3: $HDD3
@@ -151,12 +167,11 @@ CPU1: $CPU1
 CPU2: $CPU2
 CPU3: $CPU3
 CPU Package: $CPUP"
-      message="Subject: $subject\n\n$body"
-      send_email "$message"
+      notify "$subject" "$body"
     fi
     if [[ $CRIT_TEMP_FLAG == "True" ]]; then
-      subject="[HP Server] [ALERT] Server is shutting down!"
-      body="TEMPERATURES:\n
+      subject="[$(hostname) - $(hostname -I | awk '{print $1}')] - Server is shutting down!"
+      body="TEMPERATURES:
 SSD: $HDD1
 HDD2: $HDD2
 HDD3: $HDD3
@@ -167,8 +182,7 @@ CPU2: $CPU2
 CPU3: $CPU3
 CPU Package: $CPUP
 FLAG: $CRIT_TEMP_FLAG"
-      message="Subject: $subject\n\n$body"
-      send_email "$message"
+      notify "$subject" "$body"
       shutdown
     else
       unset_flags
@@ -262,8 +276,8 @@ FLAG: $CRIT_TEMP_FLAG"
       unset_flags
       COLD_TEMP_FLAG="True"
       logger -t ilo4_fan_manager -p user.warning "COLD_TEMP_FLAG=$COLD_TEMP_FLAG"
-      subject="[HP Server] [ALERT] Server is freezing!"
-      body="TEMPERATURES:\n
+      subject="[$(hostname) - $(hostname -I | awk '{print $1}')] - Server is freezing!"
+      body="TEMPERATURES:
 SSD: $HDD1
 HDD2: $HDD2
 HDD3: $HDD3
@@ -273,8 +287,7 @@ CPU1: $CPU1
 CPU2: $CPU2
 CPU3: $CPU3
 CPU Package: $CPUP"
-      message="Subject: $subject\n\n$body"
-      send_email "$message"
+      notify "$subject" "$body"
     fi
   fi
   sleep "$FREQ"
